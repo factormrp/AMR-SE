@@ -1,13 +1,3 @@
-##### MODEL INSTANTIATION FUNCTION (SET HYPERPARAMETERS HERE)
-def instantiate(vocab,device):
-    ntokens = len(vocab.stoi) # the size of vocabulary
-    emsize = 200 # embedding dimension
-    nhid = 2048 # the dimension of the feedforward network model in nn.TransformerEncoder
-    nlayers = 6 # the number of nn.TransformerEncoderLayer in nn.TransformerEncoder
-    nhead = 8 # the number of heads in the multiheadattention models
-    dropout = 0.1 # the dropout value
-    return TransformerModel(ntokens, emsize, nhead, nhid, nlayers, dropout).to(device)
-
 #####################################################################################
 ##### BASIC TRANSFORMER IMPLEMENTATION FROM PYTORCH WEBSITE
 import math
@@ -42,9 +32,11 @@ class TransformerModel(nn.Module):
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src, src_mask):
+        print("-> encoding...")
         src = self.encoder(src) * math.sqrt(self.ninp)
         src = self.pos_encoder(src)
         output = self.transformer_encoder(src, src_mask)
+        print("-> decoding...")
         output = self.decoder(output)
         return output
 
@@ -70,15 +62,15 @@ class PositionalEncoding(nn.Module):
 ##### BASIC TRAIN AND EVALUATE IMPLEMENTATION FROM PYTORCH WEBSITE
 import time
 
-def train(model,sequen_size,device,criterion,optimizer,scheduler):
+def train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,scheduler):
     model.train() # Turn on the train mode
     total_loss = 0.
     start_time = time.time()
-    src_mask = model.generate_square_subsequent_mask(sequen_size).to(device)
-    for batch, i in enumerate(range(0, train_data.size(0) - 1, sequen_size)):
-        data, targets = get_batch(train_data, i)
+    src_mask = model.generate_square_subsequent_mask(bptt).to(device)
+    for batch, i in enumerate(range(0, train_data.size(0) - 1, bptt)):
+        data, targets = get_batch(train_data, i,bptt)
         optimizer.zero_grad()
-        if data.size(0) != sequen_size:
+        if data.size(0) != bptt:
             src_mask = model.generate_square_subsequent_mask(data.size(0)).to(device)
         output = model(data, src_mask)
         loss = criterion(output.view(-1, ntokens), targets)
@@ -86,6 +78,7 @@ def train(model,sequen_size,device,criterion,optimizer,scheduler):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
+        print("->",batch,"processed...")
         total_loss += loss.item()
         log_interval = 200
         if batch % log_interval == 0 and batch > 0:
@@ -94,20 +87,20 @@ def train(model,sequen_size,device,criterion,optimizer,scheduler):
             print('| epoch {:3d} | {:5d}/{:5d} batches | '
                   'lr {:02.2f} | ms/batch {:5.2f} | '
                   'loss {:5.2f} | ppl {:8.2f}'.format(
-                    epoch, batch, len(train_data) // sequen_size, scheduler.get_lr()[0],
+                    epoch, batch, len(train_data) // bptt, scheduler.get_lr()[0],
                     elapsed * 1000 / log_interval,
                     cur_loss, math.exp(cur_loss)))
             total_loss = 0
             start_time = time.time()
 
-def evaluate(model,criterion,eval_model,data_source):
+def evaluate(model,criterion,ntokens,eval_model,data_source):
     eval_model.eval() # Turn on the evaluation mode
     total_loss = 0.
-    src_mask = model.generate_square_subsequent_mask(sequen_size).to(device)
+    src_mask = model.generate_square_subsequent_mask(bptt).to(device)
     with torch.no_grad():
-        for i in range(0, data_source.size(0) - 1, sequen_size):
+        for i in range(0, data_source.size(0) - 1, bptt):
             data, targets = get_batch(data_source, i)
-            if data.size(0) != sequen_size:
+            if data.size(0) != bptt:
                 src_mask = model.generate_square_subsequent_mask(data.size(0)).to(device)
             output = eval_model(data, src_mask)
             output_flat = output.view(-1, ntokens)
@@ -130,8 +123,8 @@ def batchify(data,batch_size,device):
     data = data.view(batch_size, -1).t().contiguous()
     return data.to(device)
 
-def get_batch(source,i,sequen_size):
-    seq_len = min(sequen_size, len(source) - 1 - i)
+def get_batch(source,i,bptt):
+    seq_len = min(bptt, len(source) - 1 - i)
     data = source[i:i+seq_len]
     target = source[i+1:i+1+seq_len].reshape(-1)
     return data, target
@@ -147,12 +140,12 @@ from torchtext.vocab import build_vocab_from_iterator
 
 def concat_training_sets(archive,difficulty):
     if archive:
-        print("Extracting data from archive...")
+        print("-> extracting data from archive...")
         files = extract_archive(archive)
         for file in files:
             file_process(file,difficulty)
     else:
-        print("Walking data folder...")
+        print("-> walking data folder...")
         for p,d,files in os.walk('./mathematics_dataset-v1.0'):
             for file in files:
                 file_process(os.path.join(p,file),difficulty)
@@ -189,7 +182,7 @@ def add_contents(filename,f):
     # open the file at filename and write every line from f into it
     with open(filename,'a') as w:
         for i in range(4000):
-            w.write(f.readline().strip())
+            w.write(f.readline())
         w.close()
 
 def data_serve(device,difficulty='-all'):
@@ -258,9 +251,14 @@ def main(args):
         train_data,val_data,test_data,vocab = data_serve(device=device)
 
     # instantiate the model
-    print("Setting up the model...")
-    model = instantiate(vocab,device)
-
+    ntokens = len(vocab.stoi) # the size of vocabulary
+    emsize = 200 # embedding dimension
+    nhid = 2048 # the dimension of the feedforward network model in nn.TransformerEncoder
+    nlayers = 6 # the number of nn.TransformerEncoderLayer in nn.TransformerEncoder
+    nhead = 8 # the number of heads in the multiheadattention models
+    dropout = 0.1 # the dropout value
+    model = TransformerModel(ntokens, emsize, nhead, nhid, nlayers, dropout).to(device)
+    
     print("-> choosing criterion...")
     criterion = nn.CrossEntropyLoss()
     print("-> choosing optimizer\n.\n.\n.")
@@ -271,13 +269,13 @@ def main(args):
     best_val_loss = float("inf")
     epochs = 3 # The number of epochs
     best_model = None
-    sequen_size = 160 # The maximum size of each sequence
+    bptt = 50 # The maximum size of each sequence
 
     print("Training the model...")
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
-        train(model,sequen_size,device,criterion,optimizer,scheduler)
-        val_loss = evaluate(model,criterion,model,val_data)
+        train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,scheduler)
+        val_loss = evaluate(model,criterion,ntokens,model,val_data)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
             'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
@@ -291,11 +289,13 @@ def main(args):
         scheduler.step()
 
     print("Evaluating the model...")
-    test_loss = evaluate(model,criterion,best_model,test_data)
+    test_loss = evaluate(model,criterion,ntokens,best_model,test_data)
     print('=' * 89)
     print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
         test_loss, math.exp(test_loss)))
     print('=' * 89)
+
+    torch.save(model.state_dict(),'best_model.pt')
 
 if __name__ == "__main__":
     import sys
