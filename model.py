@@ -139,6 +139,7 @@ def get_batch(source,i,sequen_size):
 #####################################################################################
 ##### DATA SERVING IMPLEMENTATION
 import io
+import os
 # import torch
 from torchtext.utils import extract_archive 
 from torchtext.data.utils import get_tokenizer
@@ -146,37 +147,40 @@ from torchtext.vocab import build_vocab_from_iterator
 
 def concat_training_sets(archive,difficulty):
     if archive:
+        print("Extracting data from archive...")
         files = extract_archive(archive)
         for file in files:
             file_process(file,difficulty)
     else:
+        print("Walking data folder...")
         for p,d,files in os.walk('./mathematics_dataset-v1.0'):
             for file in files:
                 file_process(os.path.join(p,file),difficulty)
 
 def file_process(file,difficulty):
     # create testing master files regardless of difficulty
-    if file.find('interpolate'):
+    if 'interpolate' in file:
         with open(file,'r') as f:
             add_contents('interpolate.txt',f)    
             f.close()
-    if file.find('extrapolate'):
+
+    if 'extrapolate' in file:
         with open(file,'r') as f:
             add_contents('extrapolate.txt',f)    
             f.close()
 
     # create training file(s), processing only specified difficulty
-    if file.find('train-easy') and (difficulty == '-easy' or difficulty == '-all'):
+    if 'train-easy' in file and (difficulty == '-easy' or difficulty == '-all'):
         with open(file,'r') as f:
             add_contents('train{}.txt'.format(difficulty),f)
             f.close()
 
-    if file.find('train-medium') and (difficulty == '-medium' or difficulty == '-all'):
+    if 'train-medium' in file and (difficulty == '-medium' or difficulty == '-all'):
         with open(file,'r') as f:
             add_contents('train{}.txt'.format(difficulty),f)
             f.close()
 
-    if file.find('train-hard') and (difficulty == '-hard' or difficulty == '-all'):
+    if 'train-hard' in file and (difficulty == '-hard' or difficulty == '-all'):
         with open(file,'r') as f:
             add_contents('train{}.txt'.format(difficulty),f)
             f.close()
@@ -184,11 +188,11 @@ def file_process(file,difficulty):
 def add_contents(filename,file):
     # open the file at filename and write every line from file into it
     with open(filename,'a') as w:
-            for line in file:
-                w.write(line)
-            w.close()
+        for line in file:
+            w.write(line)
+        w.close()
 
-def data_serve(difficulty='-all',device):
+def data_serve(device,difficulty='-all'):
     # create training data files in current working directory
     print("Creating Training Data...")
     if os.path.exists('mathematics_dataset-v1.0'):
@@ -245,7 +249,7 @@ def main(args):
 
     # serve data
     if len(args)>1:
-        train_data,val_data,test_data,vocab = data_serve(args[1:],device)
+        train_data,val_data,test_data,vocab = data_serve(device,''.join(args[1:]))
     else:
         train_data,val_data,test_data,vocab = data_serve(device=device)
 
@@ -261,7 +265,7 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
     best_val_loss = float("inf")
-    epochs = 1000 # The number of epochs
+    epochs = 3 # The number of epochs
     best_model = None
     sequen_size = 160 # The maximum size of each sequence
 
