@@ -185,11 +185,11 @@ def file_process(file,difficulty):
             add_contents('train{}.txt'.format(difficulty),f)
             f.close()
 
-def add_contents(filename,file):
-    # open the file at filename and write every line from file into it
+def add_contents(filename,f):
+    # open the file at filename and write every line from f into it
     with open(filename,'a') as w:
-        for line in file:
-            w.write(line)
+        for i in range(4000):
+            w.write(f.readline().strip())
         w.close()
 
 def data_serve(device,difficulty='-all'):
@@ -230,6 +230,10 @@ def data_serve(device,difficulty='-all'):
 #####################################################################################
 ##### DRIVER IMPLEMENTATION
 def main(args):
+    # remove any generated files before creating training data
+    import cleandir as clean
+    clean.main()
+    
     # check for erroneous arguments
     if len(args)>2:
         print("Too many arguments. IMPROPER SCRIPT EXECUTION")
