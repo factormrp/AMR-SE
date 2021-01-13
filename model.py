@@ -68,7 +68,7 @@ def train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,schedul
     start_time = time.time()
     src_mask = model.generate_square_subsequent_mask(bptt).to(device)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, bptt)):
-        data, targets = get_batch(train_data, i,bptt)
+        data, targets = get_batch(train_data,i,bptt)
         optimizer.zero_grad()
         if data.size(0) != bptt:
             src_mask = model.generate_square_subsequent_mask(data.size(0)).to(device)
@@ -93,13 +93,13 @@ def train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,schedul
             total_loss = 0
             start_time = time.time()
 
-def evaluate(model,criterion,ntokens,eval_model,data_source):
+def evaluate(model,criterion,bptt,ntokens,device,eval_model,data_source):
     eval_model.eval() # Turn on the evaluation mode
     total_loss = 0.
     src_mask = model.generate_square_subsequent_mask(bptt).to(device)
     with torch.no_grad():
         for i in range(0, data_source.size(0) - 1, bptt):
-            data, targets = get_batch(data_source, i)
+            data, targets = get_batch(data_source,i,bptt)
             if data.size(0) != bptt:
                 src_mask = model.generate_square_subsequent_mask(data.size(0)).to(device)
             output = eval_model(data, src_mask)
@@ -275,7 +275,7 @@ def main(args):
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
         train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,scheduler)
-        val_loss = evaluate(model,criterion,ntokens,model,val_data)
+        val_loss = evaluate(model,criterion,bptt,ntokens,device,model,val_data)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
             'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
@@ -289,7 +289,7 @@ def main(args):
         scheduler.step()
 
     print("Evaluating the model...")
-    test_loss = evaluate(model,criterion,ntokens,best_model,test_data)
+    test_loss = evaluate(model,criterion,bptt,ntokens,device,best_model,test_data)
     print('=' * 89)
     print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
         test_loss, math.exp(test_loss)))
