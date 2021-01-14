@@ -32,11 +32,9 @@ class TransformerModel(nn.Module):
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src, src_mask):
-        print("-> encoding...")
         src = self.encoder(src) * math.sqrt(self.ninp)
         src = self.pos_encoder(src)
         output = self.transformer_encoder(src, src_mask)
-        print("-> decoding...")
         output = self.decoder(output)
         return output
 
@@ -78,7 +76,10 @@ def train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,schedul
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
-        print("->",batch,"processed...")
+        if batch == 0:
+            print("-> this will take a while...")
+        if batch%10 == 0:
+            print(".",end='')
         total_loss += loss.item()
         log_interval = 200
         if batch % log_interval == 0 and batch > 0:
@@ -87,7 +88,7 @@ def train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,schedul
             print('| epoch {:3d} | {:5d}/{:5d} batches | '
                   'lr {:02.2f} | ms/batch {:5.2f} | '
                   'loss {:5.2f} | ppl {:8.2f}'.format(
-                    epoch, batch, len(train_data) // bptt, scheduler.get_lr()[0],
+                    epoch, batch, len(train_data) // bptt, scheduler.get_last_lr()[0],
                     elapsed * 1000 / log_interval,
                     cur_loss, math.exp(cur_loss)))
             total_loss = 0
@@ -217,7 +218,7 @@ def data_serve(device,difficulty='-all'):
     val_data = batchify(val_data,eval_batch_size,device)
     test_data = batchify(test_data,eval_batch_size,device)
 
-    print("-> serving data\n.\n.\n.")
+    print("-> serving data...\n.\n.\n.")
     return train_data,val_data,test_data,lexicon
 
 #####################################################################################
@@ -250,6 +251,7 @@ def main(args):
     else:
         train_data,val_data,test_data,vocab = data_serve(device=device)
 
+    print("Creating the model...")
     # instantiate the model
     ntokens = len(vocab.stoi) # the size of vocabulary
     emsize = 200 # embedding dimension
@@ -261,7 +263,7 @@ def main(args):
     
     print("-> choosing criterion...")
     criterion = nn.CrossEntropyLoss()
-    print("-> choosing optimizer\n.\n.\n.")
+    print("-> choosing optimizer...\n.\n.\n.")
     lr = 0.0001 # learning rate
     optimizer = torch.optim.Adam(model.parameters(),lr=lr,betas=(0.9,0.995),eps=10**-9)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
@@ -269,12 +271,13 @@ def main(args):
     best_val_loss = float("inf")
     epochs = 3 # The number of epochs
     best_model = None
-    bptt = 50 # The maximum size of each sequence
+    bptt = 160 # The maximum size of each sequence
 
     print("Training the model...")
     for epoch in range(1, epochs + 1):
         epoch_start_time = time.time()
         train(train_data,model,epoch,bptt,ntokens,device,criterion,optimizer,scheduler)
+        print("-> validating model...")
         val_loss = evaluate(model,criterion,bptt,ntokens,device,model,val_data)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
